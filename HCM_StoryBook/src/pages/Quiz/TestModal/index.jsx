@@ -157,7 +157,7 @@ export default function TestSetupModal({
 
   // Chapter dropdown
   const [chapterIndex, setChapterIndex] = useState(
-    Number.isFinite(activeChapter) ? activeChapter : 0
+    Number.isFinite(activeChapter) ? activeChapter : 0,
   );
   const [dropOpen, setDropOpen] = useState(false);
   const dropRef = useRef(null);

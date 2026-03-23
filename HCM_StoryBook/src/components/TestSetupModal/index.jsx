@@ -1,13 +1,31 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+// eslint-disable-next-line no-unused-vars
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { X, Play, ChevronDown } from "lucide-react";
+import {
+  X,
+  Play,
+  ChevronDown,
+  Check,
+  Clock3,
+  Layers3,
+  Hash,
+  Shuffle,
+  ShieldCheck,
+  Eye,
+  Volume2,
+} from "lucide-react";
 
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const cx = (...arr) => arr.filter(Boolean).join(" ");
 
 const EASE = [0.22, 1, 0.36, 1]; // easeOutCubic-ish
 const reduceSpring = { type: "spring", stiffness: 520, damping: 34 };
+const MODE_OPTIONS = [
+  { value: "quiz", label: "Trắc nghiệm" },
+  { value: "fill", label: "Điền đáp án" },
+  { value: "mixed", label: "Hỗn hợp" },
+];
 
 // Tạo/ lấy modal-root và đảm bảo nó nằm cuối body
 function getOrCreateModalRoot() {
@@ -47,6 +65,7 @@ function FocusRing({ darkMode, active }) {
 // ====== UI blocks ======
 function FieldShell({
   label,
+  icon: Icon,
   hint,
   darkMode,
   isActive,
@@ -60,7 +79,7 @@ function FieldShell({
         darkMode
           ? "border-slate-700/80 bg-slate-800/70 hover:bg-slate-800/85"
           : "border-slate-200 bg-white hover:bg-slate-50/60",
-        className
+        className,
       )}
     >
       <FocusRing darkMode={darkMode} active={isActive} />
@@ -68,17 +87,29 @@ function FieldShell({
       <div className="relative flex items-start justify-between gap-3 mb-2">
         <div
           className={cx(
-            "text-sm font-semibold",
-            darkMode ? "text-slate-100" : "text-slate-800"
+            "flex items-center gap-2 text-sm font-semibold",
+            darkMode ? "text-slate-100" : "text-slate-800",
           )}
         >
+          {Icon ? (
+            <span
+              className={cx(
+                "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border",
+                darkMode
+                  ? "border-slate-600/90 bg-slate-700/70 text-amber-200"
+                  : "border-slate-200 bg-slate-50 text-amber-700",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+          ) : null}
           {label}
         </div>
         {hint ? (
           <div
             className={cx(
               "text-xs",
-              darkMode ? "text-slate-400" : "text-slate-500"
+              darkMode ? "text-slate-400" : "text-slate-500",
             )}
           >
             {hint}
@@ -91,77 +122,321 @@ function FieldShell({
   );
 }
 
-function SelectLike({ darkMode, value, onChange, onFocus, onBlur, children }) {
+function SelectLike({
+  darkMode,
+  value,
+  options,
+  onChange,
+  onFocus,
+  onBlur,
+  minWidth = 220,
+  align = "left",
+}) {
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [placement, setPlacement] = useState("bottom");
+  const [menuStyle, setMenuStyle] = useState({});
+  const wrapperRef = useRef(null);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const selected = useMemo(
+    () => options.find((item) => item.value === value)?.label ?? "",
+    [options, value],
+  );
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      if (!triggerRef.current) return;
+
+      const rect = triggerRef.current.getBoundingClientRect();
+      const gap = 8;
+      const viewportPadding = 12;
+      const width = Math.min(
+        Math.max(rect.width, minWidth),
+        window.innerWidth - viewportPadding * 2,
+      );
+      const desiredLeft = align === "right" ? rect.right - width : rect.left;
+      const maxLeft = Math.max(
+        viewportPadding,
+        window.innerWidth - viewportPadding - width,
+      );
+      const left = clamp(desiredLeft, viewportPadding, maxLeft);
+
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+      const spaceAbove = rect.top - viewportPadding;
+      const shouldOpenUp = spaceBelow < 260 && spaceAbove > spaceBelow;
+      const preferredHeight = window.innerWidth < 640 ? 256 : 320;
+      const availableHeight = Math.max(
+        140,
+        (shouldOpenUp ? spaceAbove : spaceBelow) - gap,
+      );
+      const maxHeight = Math.min(preferredHeight, availableHeight);
+
+      setPlacement(shouldOpenUp ? "top" : "bottom");
+      setMenuStyle({
+        position: "fixed",
+        zIndex: 2147483647,
+        width,
+        left,
+        top: shouldOpenUp ? undefined : rect.bottom + gap,
+        bottom: shouldOpenUp ? window.innerHeight - rect.top + gap : undefined,
+        maxHeight,
+      });
+    };
+
+    updatePosition();
+
+    const onResize = () => updatePosition();
+    const onScroll = () => updatePosition();
+
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onScroll, true);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open, align, minWidth]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeMenu = (restoreFocus = false) => {
+      setOpen(false);
+      onBlur?.();
+      if (restoreFocus) triggerRef.current?.focus();
+    };
+
+    const onDoc = (e) => {
+      const target = e.target;
+      if (
+        wrapperRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      closeMenu();
+    };
+
+    const onKey = (e) => {
+      if (e.key === "Escape") closeMenu(true);
+    };
+
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, onBlur]);
+
+  const toggleOpen = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      if (next) onFocus?.();
+      else onBlur?.();
+      return next;
+    });
+  };
+
+  const closeMenu = () => {
+    setOpen(false);
+    onBlur?.();
+  };
+
+  const portalTarget =
+    mounted && typeof document !== "undefined"
+      ? document.getElementById("modal-root") || document.body
+      : null;
+
   return (
-    <motion.div className="relative" initial={false}>
-      <select
-        value={value}
-        onChange={onChange}
-        onFocus={onFocus}
-        onBlur={onBlur}
+    <div ref={wrapperRef} className="relative">
+      <motion.button
+        ref={triggerRef}
+        type="button"
+        onClick={toggleOpen}
         className={cx(
-          "h-11 w-full appearance-none rounded-xl border px-3 pr-10 text-sm outline-none transition-all",
+          "group relative flex h-11 w-full items-center gap-2 rounded-xl border px-3 pr-10 text-left text-sm font-semibold outline-none transition-all",
           darkMode
-            ? "border-slate-700 bg-slate-700/60 text-slate-100 focus:border-amber-300/35 focus:ring-1 focus:ring-amber-300/10"
-            : "border-slate-200 bg-white text-slate-900 focus:border-amber-500/40 focus:ring-1 focus:ring-amber-400/10"
+            ? "border-slate-700 bg-slate-700/60 text-slate-100 hover:border-amber-300/35 hover:bg-slate-700/75"
+            : "border-slate-200 bg-white text-slate-900 hover:border-amber-500/30 hover:bg-slate-50",
+          open &&
+            (darkMode
+              ? "border-amber-300/40 bg-slate-700/80"
+              : "border-amber-500/40 bg-white"),
+          "focus-visible:ring-2 focus-visible:ring-amber-300/20",
         )}
+        whileTap={{ scale: 0.995 }}
       >
-        {children}
-      </select>
+        <span className="min-w-0 truncate">{selected}</span>
 
-      <motion.div
-        className="pointer-events-none absolute inset-y-0 right-3 flex items-center"
-        initial={false}
-        animate={{ rotate: 0 }}
-        transition={{ duration: 0.18 }}
-      >
-        <ChevronDown
-          className={cx(
-            "h-4 w-4",
-            darkMode ? "text-slate-300" : "text-slate-500"
-          )}
+        <motion.span
+          className="pointer-events-none absolute inset-y-0 right-3 flex items-center"
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ duration: 0.22, ease: EASE }}
+        >
+          <ChevronDown
+            className={cx(
+              "h-4 w-4",
+              darkMode ? "text-slate-300" : "text-slate-500",
+            )}
+          />
+        </motion.span>
+
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-xl"
+          initial={{ opacity: 0 }}
+          whileHover={{ opacity: darkMode ? 0.08 : 0.04 }}
+          animate={{ opacity: open ? (darkMode ? 0.08 : 0.04) : 0 }}
+          transition={{ duration: 0.2 }}
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.00) 65%)",
+          }}
         />
-      </motion.div>
+      </motion.button>
 
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-xl"
-        initial={{ opacity: 0 }}
-        whileHover={{ opacity: darkMode ? 0.08 : 0.04 }}
-        transition={{ duration: 0.2 }}
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.00) 65%)",
-        }}
-      />
-    </motion.div>
+      {portalTarget
+        ? createPortal(
+            <AnimatePresence>
+              {open && (
+                <motion.div
+                  ref={menuRef}
+                  initial={{
+                    opacity: 0,
+                    y: placement === "top" ? 6 : -6,
+                    scale: 0.985,
+                  }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{
+                    opacity: 0,
+                    y: placement === "top" ? 6 : -6,
+                    scale: 0.985,
+                  }}
+                  transition={reduceSpring}
+                  style={{
+                    ...menuStyle,
+                    transformOrigin:
+                      placement === "top" ? "bottom center" : "top center",
+                  }}
+                >
+                  <div
+                    className={cx(
+                      "overflow-hidden rounded-xl border shadow-[0_18px_50px_rgba(0,0,0,.32)] backdrop-blur-xl",
+                      darkMode
+                        ? "border-slate-600 bg-slate-800/98"
+                        : "border-slate-200 bg-white",
+                    )}
+                  >
+                    <div
+                      className="overflow-y-auto overflow-x-hidden px-1 py-1 custom-scrollbar overscroll-contain"
+                      style={{ maxHeight: menuStyle.maxHeight }}
+                    >
+                      <div className="flex flex-col gap-px">
+                        {options.map((option) => {
+                          const active = option.value === value;
+
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                onChange(option.value);
+                                closeMenu();
+                              }}
+                              className={cx(
+                                "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold transition-colors duration-200",
+                                active
+                                  ? darkMode
+                                    ? "bg-amber-300/18 text-amber-100"
+                                    : "bg-amber-50 text-amber-900"
+                                  : darkMode
+                                    ? "text-slate-100 hover:bg-slate-700/80"
+                                    : "text-slate-700 hover:bg-slate-100",
+                              )}
+                            >
+                              <span className="truncate">{option.label}</span>
+                              <motion.span
+                                initial={false}
+                                animate={{
+                                  opacity: active ? 1 : 0,
+                                  scale: active ? 1 : 0.8,
+                                }}
+                                transition={{ duration: 0.18 }}
+                                className={cx(
+                                  "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                                  active
+                                    ? darkMode
+                                      ? "border-amber-300/45 bg-amber-300/16 text-amber-100"
+                                      : "border-amber-300 bg-amber-50 text-amber-700"
+                                    : "border-transparent text-transparent",
+                                )}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </motion.span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>,
+            portalTarget,
+          )
+        : null}
+    </div>
   );
 }
 
-function ToggleCard({ darkMode, title, desc, checked, onChange }) {
+function ToggleCard({ darkMode, title, desc, checked, onChange, icon: Icon }) {
   return (
     <motion.label
       className={cx(
         "group relative flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 sm:px-4 cursor-pointer",
         darkMode
           ? "border-slate-700/80 bg-slate-800/70 hover:bg-slate-800/85"
-          : "border-slate-200 bg-white hover:bg-slate-50/60"
+          : "border-slate-200 bg-white hover:bg-slate-50/60",
       )}
     >
       <div className="relative">
-        <div
-          className={cx(
-            "text-sm font-semibold",
-            darkMode ? "text-slate-100" : "text-slate-800"
-          )}
-        >
-          {title}
+        <div className="flex items-center gap-2">
+          {Icon ? (
+            <span
+              className={cx(
+                "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border",
+                darkMode
+                  ? "border-slate-600/90 bg-slate-700/70 text-amber-200"
+                  : "border-slate-200 bg-slate-50 text-amber-700",
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </span>
+          ) : null}
+          <div
+            className={cx(
+              "text-sm font-semibold",
+              darkMode ? "text-slate-100" : "text-slate-800",
+            )}
+          >
+            {title}
+          </div>
         </div>
         {desc ? (
           <div
             className={cx(
-              "text-xs mt-0.5",
-              darkMode ? "text-slate-400" : "text-slate-500"
+              "text-xs mt-1",
+              darkMode ? "text-slate-400" : "text-slate-500",
             )}
           >
             {desc}
@@ -186,8 +461,8 @@ function ToggleCard({ darkMode, title, desc, checked, onChange }) {
                 ? "bg-amber-300/90"
                 : "bg-amber-400"
               : darkMode
-              ? "bg-slate-700/80"
-              : "bg-slate-200"
+                ? "bg-slate-700/80"
+                : "bg-slate-200",
           )}
         />
         <motion.span
@@ -233,7 +508,7 @@ export default function TestSetupModal({
     if (totalQuestions && totalQuestions > 0) return totalQuestions;
     return (chapters || []).reduce(
       (sum, ch) => sum + (ch?.questions?.length || 0),
-      0
+      0,
     );
   }, [totalQuestions, chapters]);
 
@@ -328,7 +603,7 @@ export default function TestSetupModal({
             type="button"
             className={cx(
               "absolute inset-0 z-0",
-              darkMode ? "bg-slate-950/60" : "bg-black/40"
+              darkMode ? "bg-slate-950/60" : "bg-black/40",
             )}
             style={{ backdropFilter: "blur(12px)" }}
             aria-label="Đóng"
@@ -345,7 +620,7 @@ export default function TestSetupModal({
             className={cx(
               "relative z-10 w-[96vw] sm:w-[94vw] max-w-2xl overflow-hidden rounded-xl border",
               "max-h-[92svh] flex flex-col",
-              card
+              card,
             )}
             variants={panelVariants}
             initial="hidden"
@@ -356,7 +631,7 @@ export default function TestSetupModal({
             <motion.div
               className={cx(
                 "px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b",
-                divider
+                divider,
               )}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -365,7 +640,7 @@ export default function TestSetupModal({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <div className="text-lg sm:text-xl font-extrabold tracking-tight">
+                    <div className="text-lg sm:text-xl font-bold tracking-tight text-amber-50">
                       Thiết lập bài kiểm tra
                     </div>
                     <div className={cx("text-sm", sub)}>
@@ -379,7 +654,7 @@ export default function TestSetupModal({
                   transition={{ type: "spring", stiffness: 500, damping: 18 }}
                   className={cx(
                     "p-2 rounded-lg",
-                    darkMode ? "hover:bg-slate-700" : "hover:bg-slate-100"
+                    darkMode ? "hover:bg-slate-700" : "hover:bg-slate-100",
                   )}
                   onClick={onClose}
                   aria-label="Đóng"
@@ -398,13 +673,13 @@ export default function TestSetupModal({
                 "border-b px-4 sm:px-6 py-3",
                 darkMode
                   ? "border-slate-700/70 bg-slate-800/55"
-                  : "border-slate-100 bg-slate-50/70"
+                  : "border-slate-100 bg-slate-50/70",
               )}
             >
               <div
                 className={cx(
                   "text-sm font-bold leading-snug",
-                  darkMode ? "text-white" : "text-slate-900"
+                  darkMode ? "text-white" : "text-slate-900",
                 )}
               >
                 {topicTitle}
@@ -412,7 +687,7 @@ export default function TestSetupModal({
               <div
                 className={cx(
                   "text-xs mt-1 leading-snug",
-                  darkMode ? "text-slate-300/80" : "text-slate-600"
+                  darkMode ? "text-slate-300/80" : "text-slate-600",
                 )}
               >
                 {topicSubtitle}
@@ -432,26 +707,18 @@ export default function TestSetupModal({
               >
                 <FieldShell
                   label="Chế độ"
+                  icon={Layers3}
                   darkMode={darkMode}
                   isActive={focused === "mode"}
                 >
                   <SelectLike
                     darkMode={darkMode}
                     value={form.mode}
-                    onChange={(e) => patch({ mode: e.target.value })}
+                    options={MODE_OPTIONS}
+                    onChange={(nextMode) => patch({ mode: nextMode })}
                     onFocus={() => setFocused("mode")}
                     onBlur={() => setFocused("")}
-                  >
-                    <option value="quiz" className="bg-slate-800 text-white">
-                      Trắc nghiệm
-                    </option>
-                    <option value="fill" className="bg-slate-800 text-white">
-                      Điền đáp án
-                    </option>
-                    <option value="mixed" className="bg-slate-800 text-white">
-                      Hỗn hợp
-                    </option>
-                  </SelectLike>
+                  />
                   <div className={cx("text-xs mt-2", sub)}>
                     Lựa chọn chế độ kiểm tra
                   </div>
@@ -459,6 +726,7 @@ export default function TestSetupModal({
 
                 <FieldShell
                   label="Số câu"
+                  icon={Hash}
                   hint={`Tối đa: ${maxTotal}`}
                   darkMode={darkMode}
                   isActive={focused === "num"}
@@ -475,7 +743,7 @@ export default function TestSetupModal({
                       "h-11 w-full rounded-xl border px-3 text-sm outline-none transition-all",
                       darkMode
                         ? "border-slate-700 bg-slate-700/60 text-slate-100 focus:border-amber-300/35 focus:ring-1 focus:ring-amber-300/10"
-                        : "border-slate-200 bg-white text-slate-900 focus:border-amber-500/40 focus:ring-1 focus:ring-amber-400/10"
+                        : "border-slate-200 bg-white text-slate-900 focus:border-amber-500/40 focus:ring-1 focus:ring-amber-400/10",
                     )}
                     whileFocus={reduceMotion ? undefined : { scale: 1.01 }}
                     transition={{ duration: 0.18, ease: EASE }}
@@ -494,6 +762,7 @@ export default function TestSetupModal({
                   darkMode={darkMode}
                   title="Trộn câu hỏi"
                   desc="Xáo trộn thứ tự câu hỏi"
+                  icon={Shuffle}
                   checked={form.shuffle}
                   onChange={(v) => patch({ shuffle: v })}
                 />
@@ -501,6 +770,7 @@ export default function TestSetupModal({
                   darkMode={darkMode}
                   title="Strict"
                   desc="Khóa sửa đáp án"
+                  icon={ShieldCheck}
                   checked={form.strictMode}
                   onChange={(v) => patch({ strictMode: v })}
                 />
@@ -508,6 +778,7 @@ export default function TestSetupModal({
                   darkMode={darkMode}
                   title="Hiện đáp án"
                   desc="Sau mỗi câu"
+                  icon={Eye}
                   checked={form.revealAfterEach}
                   onChange={(v) => patch({ revealAfterEach: v })}
                 />
@@ -515,6 +786,7 @@ export default function TestSetupModal({
                   darkMode={darkMode}
                   title="Âm thanh hết giờ"
                   desc="Báo khi hết thời gian"
+                  icon={Volume2}
                   checked={form.sound}
                   onChange={(v) => patch({ sound: v })}
                 />
@@ -526,21 +798,22 @@ export default function TestSetupModal({
                   "rounded-3xl border p-4 sm:p-5",
                   darkMode
                     ? "border-slate-700/80 bg-slate-800/70"
-                    : "border-slate-200 bg-slate-50/60"
+                    : "border-slate-200 bg-slate-50/60",
                 )}
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex items-center gap-3 flex-wrap">
                     <motion.div
                       className={cx(
-                        "inline-flex items-center justify-center rounded-2xl border px-4 h-11 text-sm font-bold",
+                        "inline-flex items-center justify-center rounded-2xl border px-4 h-11 text-sm font-medium",
                         darkMode
                           ? "border-slate-700 bg-slate-700/55 text-slate-100"
-                          : "border-slate-200 bg-white text-slate-900"
+                          : "border-slate-200 bg-white text-slate-900",
                       )}
                       whileHover={reduceMotion ? undefined : { y: -1 }}
                       transition={{ duration: 0.18, ease: EASE }}
                     >
+                      <Clock3 className="mr-2 h-4 w-4 text-amber-200/90" />
                       Hẹn giờ
                     </motion.div>
 
@@ -557,7 +830,7 @@ export default function TestSetupModal({
                           <span
                             className={cx(
                               "text-xs font-semibold whitespace-nowrap",
-                              darkMode ? "text-slate-300" : "text-slate-600"
+                              darkMode ? "text-slate-300" : "text-slate-600",
                             )}
                           >
                             Số phút
@@ -573,7 +846,7 @@ export default function TestSetupModal({
                               "h-11 w-28 rounded-xl border px-3 text-sm outline-none transition-all",
                               darkMode
                                 ? "border-slate-700 bg-slate-700/70 text-slate-100 focus:border-amber-300/35 focus:ring-1 focus:ring-amber-300/10"
-                                : "border-slate-200 bg-white text-slate-900 focus:border-amber-500/40 focus:ring-1 focus:ring-amber-400/10"
+                                : "border-slate-200 bg-white text-slate-900 focus:border-amber-500/40 focus:ring-1 focus:ring-amber-400/10",
                             )}
                             whileFocus={
                               reduceMotion ? undefined : { scale: 1.01 }
@@ -596,7 +869,7 @@ export default function TestSetupModal({
                     />
                     <span
                       className={cx(
-                        darkMode ? "text-slate-100" : "text-slate-700"
+                        darkMode ? "text-slate-100" : "text-slate-700",
                       )}
                     >
                       Bật
@@ -631,7 +904,7 @@ export default function TestSetupModal({
                     "px-4 h-11 rounded-xl text-sm font-semibold transition-all border",
                     darkMode
                       ? "bg-slate-800 border-slate-700 text-slate-100 hover:bg-slate-700/85"
-                      : "bg-slate-800 border-slate-800 text-white hover:bg-slate-700"
+                      : "bg-slate-800 border-slate-800 text-white hover:bg-slate-700",
                   )}
                 >
                   Hủy
@@ -652,7 +925,7 @@ export default function TestSetupModal({
                   whileTap={{ scale: 0.98 }}
                   className={cx(
                     "group px-4 h-11 rounded-xl text-sm font-extrabold flex items-center gap-2 transition-all",
-                    "bg-amber-300/95 text-slate-900 hover:bg-amber-400"
+                    "bg-amber-300/95 text-slate-900 hover:bg-amber-400",
                   )}
                 >
                   <Play className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:scale-105" />

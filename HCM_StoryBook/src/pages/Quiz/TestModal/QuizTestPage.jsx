@@ -9,6 +9,7 @@ import React, {
 import { useDispatch, useSelector } from "react-redux";
 // eslint-disable-next-line no-unused-vars
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { toast } from "react-toastify";
 import { Modal } from "antd";
 import {
   ArrowLeft,
@@ -108,6 +109,18 @@ const hoverPop = (reduce) =>
         transition: { type: "spring", stiffness: 650, damping: 36 },
       };
 
+const STRICT_LOCK_TOAST_ID = "quiz-test-strict-lock";
+const STRICT_LOCK_TOAST_MESSAGE =
+  "Chế độ nghiêm ngặt đã khóa đáp án, không thể thay đổi.";
+
+const showStrictLockToast = () => {
+  if (toast.isActive(STRICT_LOCK_TOAST_ID)) return;
+
+  toast.warn(STRICT_LOCK_TOAST_MESSAGE, {
+    toastId: STRICT_LOCK_TOAST_ID,
+  });
+};
+
 /* ---------------- Pool builder (<=80) ---------------- */
 const ALL_CHAPTERS = -1;
 
@@ -163,14 +176,14 @@ function QuestionGrid({
           ? ok
             ? "ring-2 ring-emerald-400/70"
             : wrong
-            ? "ring-2 ring-red-400/70"
-            : ""
+              ? "ring-2 ring-red-400/70"
+              : ""
           : answered
-          ? "ring-2 ring-amber-300/60"
-          : "";
+            ? "ring-2 ring-amber-300/60"
+            : "";
 
         const baseBg = darkMode
-          ? "bg-slate-700/25 border-slate-600/55 hover:bg-slate-700/40 hover:border-slate-500/70"
+          ? "bg-slate-500/25 border-slate-600/55 hover:bg-slate-600 hover:border-slate-500/70"
           : "bg-white/70 border-slate-200 hover:bg-white hover:border-slate-300";
 
         const active = darkMode
@@ -383,7 +396,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
   const totalAll = useMemo(() => {
     return (chapters || []).reduce(
       (sum, ch) => sum + (ch?.questions?.length || 0),
-      0
+      0,
     );
   }, [chapters]);
 
@@ -415,7 +428,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
   const listRefs = useRef({});
   const getScrollMarginTop = useCallback(
     () => Math.round((headerH || 120) + 16),
-    [headerH]
+    [headerH],
   );
 
   /* đo header height */
@@ -534,7 +547,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
       if (chapterIndex !== ALL_CHAPTERS)
         dispatch(setActiveChapter(chapterIndex));
     },
-    [chapters, activeChapter, dispatch]
+    [chapters, activeChapter, dispatch],
   );
 
   // AutoStart
@@ -553,7 +566,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
       setSetupOpen(false);
       buildSession(nextCfg);
     },
-    [buildSession]
+    [buildSession],
   );
 
   /* -------- Derived stats -------- */
@@ -572,7 +585,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
     if (!finished) return 0;
     return items.reduce(
       (acc, it) => (answers[it.id]?.isCorrect ? acc + 1 : acc),
-      0
+      0,
     );
   }, [items, answers, finished]);
 
@@ -608,7 +621,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
         });
       }
     },
-    [items, viewMode]
+    [items, viewMode],
   );
 
   // nếu đang list mode và đổi current (ví dụ next/prev khi còn list), vẫn giữ scroll
@@ -627,20 +640,52 @@ export default function QuizTestPage({ embedded = false, onExit }) {
   const chooseQuiz = useCallback(
     (itemId, optionIndex) => {
       if (finished) return;
-      setAnswers((prev) => ({
-        ...prev,
-        [itemId]: { ...prev[itemId], optionIndex },
-      }));
+
+      setAnswers((prev) => {
+        const current = prev?.[itemId];
+        if (
+          cfg?.strictMode &&
+          current?.optionIndex !== null &&
+          current?.optionIndex !== optionIndex
+        ) {
+          showStrictLockToast();
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [itemId]: { ...current, optionIndex },
+        };
+      });
     },
-    [finished]
+    [finished, cfg?.strictMode],
   );
 
   const changeFill = useCallback(
     (itemId, text) => {
       if (finished) return;
-      setAnswers((prev) => ({ ...prev, [itemId]: { ...prev[itemId], text } }));
+
+      setAnswers((prev) => {
+        const current = prev?.[itemId];
+        const existingText = (current?.text || "").trim();
+        const newText = (text || "").trim();
+
+        if (
+          cfg?.strictMode &&
+          existingText.length > 0 &&
+          existingText !== newText
+        ) {
+          showStrictLockToast();
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [itemId]: { ...current, text },
+        };
+      });
     },
-    [finished]
+    [finished, cfg?.strictMode],
   );
 
   /* -------- Grade all (only when finish) -------- */
@@ -780,7 +825,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                 className={[
                   "px-4 h-11 rounded-2xl border font-medium transition-colors",
                   darkMode
-                    ? "border-slate-600/60 bg-slate-700/20 hover:bg-slate-700/35"
+                    ? "border-slate-600/60 bg-slate-700/20 hover:bg-slate-700"
                     : "border-slate-200 bg-white hover:bg-slate-50",
                 ].join(" ")}
                 onClick={() => navigate(QUIZ_HOME)}
@@ -811,7 +856,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                       <span className="font-medium">
                         {cfg?.chapterIndex === ALL_CHAPTERS
                           ? "Tổng hợp (≤ 80 câu)"
-                          : currentChapter?.title ?? "Phần"}
+                          : (currentChapter?.title ?? "Phần")}
                       </span>
                       <span className={`ml-2 ${subtleText}`}>
                         ({cfg?.mode === "mixed" ? "Hỗn hợp" : cfg?.mode})
@@ -854,7 +899,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                     className={[
                       "xl:hidden flex-1 md:flex-none px-3 h-10 rounded-2xl border flex items-center justify-center gap-2 text-sm font-medium transition-colors whitespace-nowrap",
                       darkMode
-                        ? "border-slate-600/60 bg-slate-700/20 hover:bg-slate-700/35"
+                        ? "border-slate-600/60 bg-slate-700/20 hover:bg-slate-700"
                         : "border-slate-200 bg-white hover:bg-slate-50",
                     ].join(" ")}
                     title="Danh sách câu"
@@ -872,7 +917,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                     className={[
                       "flex-1 md:flex-none px-3 h-10 rounded-2xl border flex items-center justify-center gap-2 text-sm font-medium transition-colors whitespace-nowrap",
                       darkMode
-                        ? "border-slate-600/60 bg-slate-700/20 hover:bg-slate-700/35"
+                        ? "border-slate-600/60 bg-slate-700/20 hover:bg-slate-700"
                         : "border-slate-200 bg-white hover:bg-slate-50",
                     ].join(" ")}
                     title="Đổi chế độ hiển thị"
@@ -923,7 +968,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                     className={[
                       "flex-1 md:flex-none px-3 h-10 rounded-2xl border text-sm font-medium transition-colors whitespace-nowrap",
                       darkMode
-                        ? "border-slate-600/60 bg-slate-700/20 hover:bg-slate-700/35"
+                        ? "border-slate-600/60 bg-slate-700/20 hover:bg-slate-700"
                         : "border-slate-200 bg-white hover:bg-slate-50",
                       !canToggleReveal ? "opacity-50 cursor-not-allowed" : "",
                     ].join(" ")}
@@ -945,7 +990,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                       "flex-1 md:flex-none px-3 h-10 rounded-2xl bg-amber-400 text-slate-900 font-medium flex items-center justify-center gap-2 transition whitespace-nowrap",
                       finished
                         ? "opacity-70 cursor-not-allowed"
-                        : "hover:brightness-95",
+                        : "hover:brightness-105",
                     ].join(" ")}
                     title="Nộp bài"
                   >
@@ -960,7 +1005,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                     className={[
                       "hidden md:flex px-3 h-10 rounded-2xl border items-center justify-center gap-2 transition-colors whitespace-nowrap",
                       darkMode
-                        ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700/35"
+                        ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700"
                         : "border-slate-200 bg-white hover:bg-slate-50",
                     ].join(" ")}
                     title="Thoát về Quiz"
@@ -975,7 +1020,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                     className={[
                       "md:hidden flex-1 px-3 h-10 rounded-2xl border flex items-center justify-center gap-2 transition-colors whitespace-nowrap",
                       darkMode
-                        ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700/35"
+                        ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700"
                         : "border-slate-200 bg-white hover:bg-slate-50",
                     ].join(" ")}
                     title="Thoát"
@@ -1060,7 +1105,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                   className={[
                     "px-4 h-10 rounded-2xl border font-medium transition-colors",
                     darkMode
-                      ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700/35"
+                      ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700"
                       : "border-slate-200 bg-white hover:bg-slate-50",
                   ].join(" ")}
                 >
@@ -1117,6 +1162,8 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                         question={currentQuestion}
                         answer={answers[currentItem.id]}
                         onChoose={(idx) => chooseQuiz(currentItem.id, idx)}
+                        strictMode={cfg.strictMode}
+                        revealAfterEach={cfg.revealAfterEach}
                       />
                     ) : (
                       <FillBlock
@@ -1127,6 +1174,8 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                         question={currentQuestion}
                         answer={answers[currentItem.id]}
                         onChangeText={(t) => changeFill(currentItem.id, t)}
+                        strictMode={cfg.strictMode}
+                        revealAfterEach={cfg.revealAfterEach}
                       />
                     )}
                   </div>
@@ -1139,7 +1188,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                       className={[
                         "px-4 h-11 rounded-2xl border flex items-center gap-2 font-medium transition-colors",
                         darkMode
-                          ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700/35"
+                          ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700"
                           : "border-slate-200 bg-white hover:bg-slate-50",
                         !canGoPrev ? "opacity-60 cursor-not-allowed" : "",
                       ].join(" ")}
@@ -1182,7 +1231,7 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                       className={[
                         "px-4 h-11 rounded-2xl border flex items-center gap-2 font-medium transition-colors",
                         darkMode
-                          ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700/35"
+                          ? "border-slate-600/60 bg-slate-700/18 hover:bg-slate-700"
                           : "border-slate-200 bg-white hover:bg-slate-50",
                         !canGoNext ? "opacity-60 cursor-not-allowed" : "",
                       ].join(" ")}
@@ -1256,6 +1305,8 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                           question={q}
                           answer={a}
                           onChoose={(optIdx) => chooseQuiz(it.id, optIdx)}
+                          strictMode={cfg.strictMode}
+                          revealAfterEach={cfg.revealAfterEach}
                         />
                       ) : (
                         <FillBlock
@@ -1266,6 +1317,8 @@ export default function QuizTestPage({ embedded = false, onExit }) {
                           question={q}
                           answer={a}
                           onChangeText={(t) => changeFill(it.id, t)}
+                          strictMode={cfg.strictMode}
+                          revealAfterEach={cfg.revealAfterEach}
                         />
                       )}
                     </div>
@@ -1294,6 +1347,8 @@ function QuizBlock({
   question,
   answer,
   onChoose,
+  strictMode,
+  revealAfterEach,
 }) {
   const options = getQuizOptions(question);
   const correct = getQuizCorrectIndex(question);
@@ -1307,7 +1362,9 @@ function QuizBlock({
     <div className="space-y-2">
       {options.map((opt, idx) => {
         const selected = answer?.optionIndex === idx;
-        const reveal = finished && showAnswers;
+        const reveal =
+          (finished && showAnswers) ||
+          (revealAfterEach && answer?.optionIndex !== null);
 
         const isCorrectOption = reveal && idx === correct;
         const isWrongPick =
@@ -1339,19 +1396,32 @@ function QuizBlock({
             ? "border-amber-300/80 text-amber-200 bg-amber-500/10"
             : bubbleBase
           : isWrongPick
-          ? "border-red-400/80 text-red-200 bg-red-500/10"
-          : isCorrectOption
-          ? "border-emerald-400/80 text-emerald-200 bg-emerald-500/10"
-          : selected
-          ? "border-amber-300/80 text-amber-200 bg-amber-500/10"
-          : bubbleBase;
+            ? "border-red-400/80 text-red-200 bg-red-500/10"
+            : isCorrectOption
+              ? "border-emerald-400/80 text-emerald-200 bg-emerald-500/10"
+              : selected
+                ? "border-amber-300/80 text-amber-200 bg-amber-500/10"
+                : bubbleBase;
 
         return (
           <motion.button
             key={idx}
             {...hoverLift(reduceMotion)}
             disabled={finished}
-            onClick={() => onChoose(idx)}
+            onClick={() => {
+              if (finished) return;
+              if (
+                strictMode &&
+                answer?.optionIndex !== null &&
+                answer.optionIndex !== idx
+              ) {
+                showStrictLockToast(
+                  "Bạn đã chọn đáp án và không thể thay đổi trong chế độ nghiêm ngặt!",
+                );
+                return;
+              }
+              onChoose(idx);
+            }}
             className={`${base} ${style} ${
               finished ? "opacity-95 cursor-not-allowed" : ""
             }`}
@@ -1390,7 +1460,9 @@ function QuizBlock({
             darkMode ? "text-slate-300/80" : "text-slate-600"
           }`}
         >
-          Chọn 1 đáp án (có thể đổi trước khi nộp bài).
+          {strictMode
+            ? "Chọn 1 đáp án (không thể đổi sau khi chọn)."
+            : "Chọn 1 đáp án (có thể đổi trước khi nộp bài)."}
         </div>
       )}
     </div>
@@ -1405,9 +1477,13 @@ function FillBlock({
   question,
   answer,
   onChangeText,
+  strictMode,
+  revealAfterEach,
 }) {
   const correct = getFillAnswer(question);
-  const reveal = finished && showAnswers;
+  const reveal =
+    (finished && showAnswers) ||
+    (revealAfterEach && (answer?.text || "").trim().length > 0);
 
   return (
     <div>
@@ -1423,7 +1499,16 @@ function FillBlock({
       >
         <input
           value={answer?.text ?? ""}
-          onChange={(e) => onChangeText(e.target.value)}
+          onChange={(e) => {
+            if (finished) return;
+            if (strictMode && (answer?.text || "").trim().length > 0) {
+              showStrictLockToast(
+                "Bạn đã nhập đáp án và không thể thay đổi trong chế độ nghiêm ngặt!",
+              );
+              return;
+            }
+            onChangeText(e.target.value);
+          }}
           disabled={finished}
           placeholder="Nhập đáp án…"
           className={`flex-1 bg-transparent outline-none text-sm font-medium ${
@@ -1457,7 +1542,9 @@ function FillBlock({
             darkMode ? "text-slate-300/80" : "text-slate-600"
           }`}
         >
-          Nhập đáp án (có thể sửa trước khi nộp bài).
+          {strictMode
+            ? "Nhập đáp án (không thể sửa sau khi nhập)."
+            : "Nhập đáp án (có thể sửa trước khi nộp bài)."}
         </div>
       )}
     </div>
