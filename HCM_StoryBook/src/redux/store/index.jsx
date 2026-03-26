@@ -28,7 +28,8 @@ const quizTransform = createTransform(
   // SAVE
   (inboundState) => {
     if (!inboundState) return inboundState;
-    const { chapters, ...rest } = inboundState;
+    const rest = { ...inboundState };
+    delete rest.chapters;
     return rest;
   },
   // LOAD

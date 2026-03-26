@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, {
   useMemo,
   useEffect,
@@ -158,7 +159,6 @@ const TimelineSection = ({ visibleSections }) => {
   // Freeze during resize
   const [isResizing, setIsResizing] = useState(false);
   const lastProgressRef = useRef(0);
-  const [spineHeight, setSpineHeight] = useState(null);
 
   // Scroll progress (spring)
   const { scrollYProgress } = useScroll({
@@ -201,7 +201,7 @@ const TimelineSection = ({ visibleSections }) => {
   useLayoutEffect(() => {
     if (sectionRef.current && !isResizing) {
       const rect = sectionRef.current.getBoundingClientRect();
-      setSpineHeight(Math.max(0, rect.height - 48)); // 100% - 3rem
+      // setSpineHeight(Math.max(0, rect.height - 48)); // 100% - 3rem
     }
   }, [isResizing]);
 

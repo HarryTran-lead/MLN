@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, { useEffect, useState } from "react";
 import { Quote, BookOpen, Layers } from "lucide-react";
 import { introSlides, concepts } from "./data";

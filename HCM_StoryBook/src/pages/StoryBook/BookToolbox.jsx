@@ -42,7 +42,7 @@ export default function BookToolbox() {
       const p = JSON.parse(localStorage.getItem("book:pos"));
       if (p && typeof p.left === "number" && typeof p.top === "number")
         return p;
-    } catch {}
+    } catch { /* empty */ }
     const left = 16;
     const top = Math.max(16, Math.round((window.innerHeight - 200) / 2));
     return { left, top };
@@ -439,7 +439,7 @@ export default function BookToolbox() {
                 if (!document.fullscreenElement)
                   await scene?.requestFullscreen();
                 else await document.exitFullscreen();
-              } catch {}
+              } catch { /* empty */ }
             }}
             aria-label={
               document.fullscreenElement

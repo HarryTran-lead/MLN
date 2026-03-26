@@ -1,4 +1,5 @@
 // src/pages/Study_Header.jsx
+/* eslint-disable no-unused-vars */
 import React, { memo, useCallback, useMemo } from "react";
 import {
   RotateCcw,

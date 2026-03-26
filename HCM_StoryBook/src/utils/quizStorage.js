@@ -14,13 +14,13 @@ export const readJSON = (key, fallback = {}) => {
 export const writeJSON = (key, value) => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
+  } catch { /* empty */ }
 };
 
 export const clearAllQuizStorage = () => {
   try {
     localStorage.removeItem(UI_KEY);
-  } catch {}
+  } catch { /* empty */ }
 };
 
 export const makeKey = (chapterIndex, questionIndex) =>
